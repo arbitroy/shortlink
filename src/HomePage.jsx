@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Link2, Check, ExternalLink, Share2, Zap, Shield, BarChart3 } from 'lucide-react';
+import { Copy, Link2, Check, ExternalLink, Share2, Zap, Shield, BarChart3, Download } from 'lucide-react';
 import BlurText from './BlurText';
 import QRCode from './QRCode';
 import { colors } from './utils';
@@ -32,6 +32,28 @@ function HomePage({ onShortenUrl, attempts, isAuthenticated }) {
         navigator.clipboard.writeText(shortUrl.shortUrl);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const downloadQRCode = () => {
+        const svg = document.querySelector('#home-qr-code svg');
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            const pngFile = canvas.toDataURL('image/png');
+            const downloadLink = document.createElement('a');
+            downloadLink.download = `qr-${shortUrl.shortCode}.png`;
+            downloadLink.href = pngFile;
+            downloadLink.click();
+        };
+
+        img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
     };
 
     return (
@@ -202,10 +224,20 @@ function HomePage({ onShortenUrl, attempts, isAuthenticated }) {
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
                                         exit={{ opacity: 0, height: 0 }}
-                                        className="mt-6 flex justify-center"
+                                        className="mt-6"
                                     >
-                                        <div className="bg-white p-4 rounded-lg">
-                                            <QRCode value={shortUrl.shortUrl} size={200} />
+                                        <div className="flex flex-col items-center space-y-4">
+                                            <div id="home-qr-code" className="bg-white p-4 rounded-lg">
+                                                <QRCode value={shortUrl.shortUrl} size={200} />
+                                            </div>
+                                            <button
+                                                onClick={downloadQRCode}
+                                                className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:opacity-90 transition-all"
+                                                style={{ backgroundColor: colors.warning }}
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                <span>Download QR Code</span>
+                                            </button>
                                         </div>
                                     </motion.div>
                                 )}
