@@ -22,7 +22,7 @@ function App() {
     if (savedUser) {
       setUser(savedUser);
     }
-    
+
     const savedAttempts = storage.getAttempts();
     setAttempts(savedAttempts);
   }, []);
@@ -34,7 +34,7 @@ function App() {
       storage.setUser(response.user);
       setUser(response.user);
       setCurrentView('home');
-      
+
       // Reset attempts for logged in users
       localStorage.removeItem('urlShortenerAttempts');
       setAttempts({ count: 0, resetTime: 0 });
@@ -56,21 +56,21 @@ function App() {
     if (!user) {
       const currentAttempts = storage.incrementAttempts();
       setAttempts(currentAttempts);
-      
+
       if (currentAttempts.count > 3) {
         setCurrentView('login');
         return null;
       }
     }
-    
+
     try {
       const result = await api.shortenUrl(url);
-      
+
       // Add to local history if logged in
       if (user) {
         setUrlHistory(prev => [result, ...prev]);
       }
-      
+
       return result;
     } catch (error) {
       console.error('Failed to shorten URL:', error);
@@ -80,7 +80,7 @@ function App() {
 
   const loadUrlHistory = async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
       const response = await api.getUrlHistory();
@@ -101,15 +101,15 @@ function App() {
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: colors.background, color: colors.text }}>
       {/* DotGrid Background */}
-      <div className="absolute inset-0 opacity-30" style={{ pointerEvents: 'auto' }}>
+      <div className="fixed inset-0 w-full h-full opacity-30" style={{ pointerEvents: 'auto' }}>
         <DotGrid
-          dotSize={8}
-          gap={20}
-          baseColor={colors.primary}
-          activeColor={colors.secondary}
-          proximity={120}
-          shockRadius={250}
-          shockStrength={5}
+          dotSize={12}
+          gap={25}
+          baseColor="#86BBD8"
+          activeColor="#F6AE2D"
+          proximity={200}
+          shockRadius={300}
+          shockStrength={8}
           resistance={750}
           returnDuration={1.5}
         />
@@ -129,7 +129,7 @@ function App() {
                   <Link2 className="w-6 h-6" style={{ color: colors.accent }} />
                   <span>ShortLink</span>
                 </button>
-                
+
                 {user && (
                   <button
                     onClick={() => setCurrentView('history')}
@@ -141,7 +141,7 @@ function App() {
                   </button>
                 )}
               </div>
-              
+
               <div className="flex items-center space-x-4">
                 {user ? (
                   <>
@@ -176,21 +176,21 @@ function App() {
         {/* Main Content */}
         <AnimatePresence mode="wait">
           {currentView === 'home' && (
-            <HomePage 
+            <HomePage
               onShortenUrl={handleShortenUrl}
               attempts={attempts}
               isAuthenticated={!!user}
             />
           )}
-          
+
           {currentView === 'login' && (
             <LoginPage onLogin={handleLogin} loading={loading} />
           )}
-          
+
           {currentView === 'history' && (
             <HistoryPage history={urlHistory} loading={loading} />
           )}
-          
+
           {currentView === '404' && (
             <NotFoundPage onGoHome={() => setCurrentView('home')} />
           )}
