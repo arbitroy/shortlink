@@ -74,14 +74,18 @@ const DotGrid = ({
         if (!wrap || !canvas) return;
 
         const { width, height } = wrap.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
 
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
+        // Set canvas dimensions to exactly match CSS dimensions (1:1 pixel ratio)
+        canvas.width = width;
+        canvas.height = height;
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
+        
+        // Reset context transformation to ensure 1:1 mapping
         const ctx = canvas.getContext("2d");
-        if (ctx) ctx.scale(dpr, dpr);
+        if (ctx) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+        }
 
         const cols = Math.floor((width + gap) / (dotSize + gap));
         const rows = Math.floor((height + gap) / (dotSize + gap));
@@ -118,6 +122,8 @@ const DotGrid = ({
             if (!canvas) return;
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
+            
+            // Clear the entire canvas using CSS dimensions
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const { x: px, y: py } = pointerRef.current;
@@ -135,7 +141,7 @@ const DotGrid = ({
                     const t = 1 - dist / proximity;
                     const r = Math.round(baseRgb.r + (activeRgb.r - baseRgb.r) * t);
                     const g = Math.round(baseRgb.g + (activeRgb.g - baseRgb.g) * t);
-                    const b = Math.round(baseRgb.b + (activeRgb.b - baseRgb.b) * t);
+                    const b = Math.round(baseRgb.b + (baseRgb.b - baseRgb.b) * t);
                     style = `rgb(${r},${g},${b})`;
                 }
 
@@ -157,10 +163,15 @@ const DotGrid = ({
         buildGrid();
         let ro = null;
         if ("ResizeObserver" in window) {
-            ro = new ResizeObserver(buildGrid);
+            ro = new ResizeObserver(() => {
+                // Add a small delay to ensure proper dimensions are captured
+                setTimeout(buildGrid, 10);
+            });
             wrapperRef.current && ro.observe(wrapperRef.current);
         } else {
-            window.addEventListener("resize", buildGrid);
+            window.addEventListener("resize", () => {
+                setTimeout(buildGrid, 10);
+            });
         }
         return () => {
             if (ro) ro.disconnect();
@@ -170,6 +181,9 @@ const DotGrid = ({
 
     useEffect(() => {
         const onMove = (e) => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+
             const now = performance.now();
             const pr = pointerRef.current;
             const dt = pr.lastTime ? now - pr.lastTime : 16;
@@ -191,7 +205,8 @@ const DotGrid = ({
             pr.vy = vy;
             pr.speed = speed;
 
-            const rect = canvasRef.current.getBoundingClientRect();
+            // Get accurate mouse position relative to canvas
+            const rect = canvas.getBoundingClientRect();
             pr.x = e.clientX - rect.left;
             pr.y = e.clientY - rect.top;
 
@@ -200,8 +215,8 @@ const DotGrid = ({
                 if (speed > speedTrigger && dist < proximity && !dot._inertiaApplied) {
                     dot._inertiaApplied = true;
                     gsap.killTweensOf(dot);
-                    const pushX = dot.cx - pr.x + vx * 0.005;
-                    const pushY = dot.cy - pr.y + vy * 0.005;
+                    const pushX = (dot.cx - pr.x) * 0.1 + vx * 0.005;
+                    const pushY = (dot.cy - pr.y) * 0.1 + vy * 0.005;
                     gsap.to(dot, {
                         inertia: { xOffset: pushX, yOffset: pushY, resistance },
                         onComplete: () => {
@@ -210,8 +225,10 @@ const DotGrid = ({
                                 yOffset: 0,
                                 duration: returnDuration,
                                 ease: "elastic.out(1,0.75)",
+                                onComplete: () => {
+                                    dot._inertiaApplied = false;
+                                }
                             });
-                            dot._inertiaApplied = false;
                         },
                     });
                 }
@@ -219,9 +236,13 @@ const DotGrid = ({
         };
 
         const onClick = (e) => {
-            const rect = canvasRef.current.getBoundingClientRect();
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+
+            const rect = canvas.getBoundingClientRect();
             const cx = e.clientX - rect.left;
             const cy = e.clientY - rect.top;
+            
             for (const dot of dotsRef.current) {
                 const dist = Math.hypot(dot.cx - cx, dot.cy - cy);
                 if (dist < shockRadius && !dot._inertiaApplied) {
@@ -238,8 +259,10 @@ const DotGrid = ({
                                 yOffset: 0,
                                 duration: returnDuration,
                                 ease: "elastic.out(1,0.75)",
+                                onComplete: () => {
+                                    dot._inertiaApplied = false;
+                                }
                             });
-                            dot._inertiaApplied = false;
                         },
                     });
                 }
