@@ -46,6 +46,7 @@ const DotGrid = ({
     const wrapperRef = useRef(null);
     const canvasRef = useRef(null);
     const dotsRef = useRef([]);
+    const dimensionsRef = useRef({ width: 0, height: 0, dpr: 1 });
     const pointerRef = useRef({
         x: 0,
         y: 0,
@@ -74,17 +75,21 @@ const DotGrid = ({
         if (!wrap || !canvas) return;
 
         const { width, height } = wrap.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
 
-        // Set canvas dimensions to exactly match CSS dimensions (1:1 pixel ratio)
-        canvas.width = width;
-        canvas.height = height;
+        // Store dimensions for coordinate conversion
+        dimensionsRef.current = { width, height, dpr };
+
+        // Set canvas dimensions with DPR scaling for crisp rendering
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
-        
-        // Reset context transformation to ensure 1:1 mapping
+
         const ctx = canvas.getContext("2d");
         if (ctx) {
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            // Scale context to match DPR
+            ctx.scale(dpr, dpr);
         }
 
         const cols = Math.floor((width + gap) / (dotSize + gap));
@@ -122,9 +127,10 @@ const DotGrid = ({
             if (!canvas) return;
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
-            
-            // Clear the entire canvas using CSS dimensions
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Clear using CSS dimensions (context is already scaled)
+            const { width, height } = dimensionsRef.current;
+            ctx.clearRect(0, 0, width, height);
 
             const { x: px, y: py } = pointerRef.current;
 
@@ -141,7 +147,7 @@ const DotGrid = ({
                     const t = 1 - dist / proximity;
                     const r = Math.round(baseRgb.r + (activeRgb.r - baseRgb.r) * t);
                     const g = Math.round(baseRgb.g + (activeRgb.g - baseRgb.g) * t);
-                    const b = Math.round(baseRgb.b + (baseRgb.b - baseRgb.b) * t);
+                    const b = Math.round(baseRgb.b + (activeRgb.b - baseRgb.b) * t);
                     style = `rgb(${r},${g},${b})`;
                 }
 
@@ -164,7 +170,6 @@ const DotGrid = ({
         let ro = null;
         if ("ResizeObserver" in window) {
             ro = new ResizeObserver(() => {
-                // Add a small delay to ensure proper dimensions are captured
                 setTimeout(buildGrid, 10);
             });
             wrapperRef.current && ro.observe(wrapperRef.current);
@@ -205,7 +210,7 @@ const DotGrid = ({
             pr.vy = vy;
             pr.speed = speed;
 
-            // Get accurate mouse position relative to canvas
+            // Convert mouse position to CSS coordinates (not canvas coordinates)
             const rect = canvas.getBoundingClientRect();
             pr.x = e.clientX - rect.left;
             pr.y = e.clientY - rect.top;
@@ -215,10 +220,21 @@ const DotGrid = ({
                 if (speed > speedTrigger && dist < proximity && !dot._inertiaApplied) {
                     dot._inertiaApplied = true;
                     gsap.killTweensOf(dot);
-                    const pushX = (dot.cx - pr.x) * 0.1 + vx * 0.005;
-                    const pushY = (dot.cy - pr.y) * 0.1 + vy * 0.005;
+
+                    // Enhanced push calculations for more dramatic effect
+                    const normalizedDist = Math.max(0.1, dist / proximity);
+                    const pushMultiplier = (1 / normalizedDist) * 0.5;
+                    const velocityMultiplier = Math.min(speed / speedTrigger, 3) * 0.01;
+
+                    const pushX = (dot.cx - pr.x) * pushMultiplier + vx * velocityMultiplier;
+                    const pushY = (dot.cy - pr.y) * pushMultiplier + vy * velocityMultiplier;
+
                     gsap.to(dot, {
-                        inertia: { xOffset: pushX, yOffset: pushY, resistance },
+                        inertia: {
+                            xOffset: pushX,
+                            yOffset: pushY,
+                            resistance: resistance
+                        },
                         onComplete: () => {
                             gsap.to(dot, {
                                 xOffset: 0,
@@ -242,23 +258,45 @@ const DotGrid = ({
             const rect = canvas.getBoundingClientRect();
             const cx = e.clientX - rect.left;
             const cy = e.clientY - rect.top;
-            
+
             for (const dot of dotsRef.current) {
                 const dist = Math.hypot(dot.cx - cx, dot.cy - cy);
                 if (dist < shockRadius && !dot._inertiaApplied) {
                     dot._inertiaApplied = true;
                     gsap.killTweensOf(dot);
-                    const falloff = Math.max(0, 1 - dist / shockRadius);
-                    const pushX = (dot.cx - cx) * shockStrength * falloff;
-                    const pushY = (dot.cy - cy) * shockStrength * falloff;
+
+                    // Much more dramatic shock wave calculations
+                    const normalizedDist = Math.max(0.01, dist / shockRadius);
+                    const falloff = Math.max(0, 1 - normalizedDist);
+
+                    // Multi-layered intensity calculation for more dramatic effect
+                    const distanceIntensity = Math.pow(falloff, 0.3); // More gradual falloff
+                    const proximityBoost = dist < (shockRadius * 0.3) ? 2.5 : 1; // Extra boost for close dots
+                    const baseIntensity = shockStrength * distanceIntensity * proximityBoost;
+
+                    // Add some randomness for more organic feel
+                    const randomFactor = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
+                    const finalIntensity = baseIntensity * randomFactor;
+
+                    // Calculate push direction with some variation
+                    const angle = Math.atan2(dot.cy - cy, dot.cx - cx);
+                    const pushDistance = finalIntensity * (50 + Math.random() * 30); // 50-80 pixel push
+
+                    const pushX = Math.cos(angle) * pushDistance;
+                    const pushY = Math.sin(angle) * pushDistance;
+
                     gsap.to(dot, {
-                        inertia: { xOffset: pushX, yOffset: pushY, resistance },
+                        inertia: {
+                            xOffset: pushX,
+                            yOffset: pushY,
+                            resistance: resistance * 0.6 // Much less resistance for more dramatic movement
+                        },
                         onComplete: () => {
                             gsap.to(dot, {
                                 xOffset: 0,
                                 yOffset: 0,
-                                duration: returnDuration,
-                                ease: "elastic.out(1,0.75)",
+                                duration: returnDuration * 1.2, // Slightly longer return for more satisfying bounce
+                                ease: "elastic.out(1,0.6)", // More bouncy return
                                 onComplete: () => {
                                     dot._inertiaApplied = false;
                                 }
@@ -269,7 +307,7 @@ const DotGrid = ({
             }
         };
 
-        const throttledMove = throttle(onMove, 50);
+        const throttledMove = throttle(onMove, 16); // Increased responsiveness
         window.addEventListener("mousemove", throttledMove, { passive: true });
         window.addEventListener("click", onClick);
 
